@@ -24,7 +24,7 @@ function setBadgeColor(color) {
     }
 }
 
-function changeProxy(index, config, callback) {
+var changeProxy = function(index, config, callback) {
     if (!config || index < 0 || index >= config.proxy_list.length) {
         index = 0;
     }
@@ -49,21 +49,21 @@ function changeProxy(index, config, callback) {
         chrome.action.setBadgeText({ text: " " });
         setBadgeColor(proxy.color);
     } else if (proxy.mode === 'fixed_servers') {
-        var proxyConfig = {
+        var singleProxy = {
             scheme: proxy.fixed_servers_schema,
             host: proxy.fixed_servers_name,
             port: parseInt(proxy.fixed_servers_port)
         };
         
         if (proxy.fixed_servers_username && proxy.fixed_servers_password) {
-            proxyConfig.username = proxy.fixed_servers_username;
-            proxyConfig.password = proxy.fixed_servers_password;
+            singleProxy.username = proxy.fixed_servers_username;
+            singleProxy.password = proxy.fixed_servers_password;
         }
         
         configProxy = {
             mode: "fixed_servers",
             rules: {
-                singleProxy: proxyConfig,
+                singleProxy: singleProxy,
                 bypassList: ["127.0.0.1", "localhost"]
             }
         };
@@ -82,39 +82,38 @@ function changeProxy(index, config, callback) {
             setBadgeColor(proxy.color);
         } else {
             chrome.action.setBadgeText({ text: "" });
-            setBadgeColor("808080"); // gray default
+            setBadgeColor("808080");
         }
     }
     
-    // 直接调用，不用回调
-    try {
-        chrome.proxy.settings.set({ value: configProxy, scope: 'regular' }, function() {});
-        chrome.action.setTitle({ title: title });
-    } catch(e) {
-        console.log("Error setting proxy:", e);
-    }
+    console.log("Setting proxy config:", JSON.stringify(configProxy));
     
-    if (callback) {
-        try {
-            callback();
-        } catch(e) {
-            console.log("Error in callback:", e);
+    // 使用最简单的方式调用
+    var details = {value: configProxy, scope: 'regular'};
+    chrome.proxy.settings.set(details, function() {
+        var err = chrome.runtime.lastError;
+        if (err) {
+            console.log("Proxy set error:", err);
+        } else {
+            console.log("Proxy set success!");
         }
-    }
-}
+    });
+    
+    chrome.action.setTitle({ title: title });
+    
+    if (callback) callback();
+};
 
-function cycleProxy(config) {
+var cycleProxy = function(config) {
     var currentIdx = config.current_proxy_index;
     var list = config.proxy_list;
     var len = list.length;
     
     console.log("=== cycleProxy ===");
     console.log("currentIdx:", currentIdx);
-    console.log("list:", JSON.stringify(list));
     
     var next_index = -1;
     
-    // 找到下一个启用的代理
     for (var i = 1; i < len; i++) {
         var j = (currentIdx + i) % len;
         if (list[j].enable) {
@@ -123,12 +122,10 @@ function cycleProxy(config) {
         }
     }
     
-    // 如果没找到，保持当前
     if (next_index === -1) {
         if (list[currentIdx] && list[currentIdx].enable) {
             next_index = currentIdx;
         } else {
-            // 找第一个启用的
             for (var i = 0; i < len; i++) {
                 if (list[i].enable) {
                     next_index = i;
@@ -145,19 +142,14 @@ function cycleProxy(config) {
         return;
     }
     
-    var self = this;
     changeProxy(next_index, config, function() {
         config.current_proxy_index = next_index;
         console.log("Saving new index:", next_index);
-        try {
-            chrome.storage.local.set({ 'switch_config': JSON.stringify(config) });
-        } catch(e) {
-            console.log("Error saving:", e);
-        }
+        chrome.storage.local.set({ 'switch_config': JSON.stringify(config) });
     });
-}
+};
 
-function loadConfig(callback) {
+var loadConfig = function(callback) {
     chrome.storage.local.get('switch_config', function(items) {
         console.log("Storage items:", items);
         
@@ -165,7 +157,6 @@ function loadConfig(callback) {
         if (items.switch_config) {
             try {
                 config = JSON.parse(items.switch_config);
-                console.log("Parsed config:", JSON.stringify(config));
             } catch (e) {
                 console.log("Parse error, using default");
                 config = defaultConfig;
@@ -175,7 +166,6 @@ function loadConfig(callback) {
             config = defaultConfig;
         }
         
-        // 确保必要的字段存在
         var keys = ['click_action', 'use_default_proxy', 'current_proxy_index'];
         for (var i = 0; i < keys.length; i++) {
             if (config[keys[i]] === undefined) {
@@ -183,7 +173,6 @@ function loadConfig(callback) {
             }
         }
         
-        // 确保 proxy_list 存在
         if (!config.proxy_list) {
             config.proxy_list = defaultConfig.proxy_list;
         }
@@ -191,7 +180,7 @@ function loadConfig(callback) {
         console.log("Final config:", JSON.stringify(config));
         if (callback) callback(config);
     });
-}
+};
 
 // 点击图标时切换代理
 chrome.action.onClicked.addListener(function(tab) {
