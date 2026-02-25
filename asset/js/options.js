@@ -5,10 +5,13 @@ function add_proxy_row(index,proxy){
         detail = "no proxy";
     }else if(proxy.mode=='pac_script'){
         mode="PAC FILE";
-        detail = "<a target='_blank' href='{url}'>{url}</a>".format({url:proxy.pac_script_url});
+        detail = "<a target='_blank' href='" + proxy.pac_script_url + "'>" + proxy.pac_script_url + "</a>";
     }else if(proxy.mode=='fixed_servers'){
         mode="FIXED SERVER";
         detail = proxy.fixed_servers_schema +', '+proxy.fixed_servers_name+', '+proxy.fixed_servers_port;
+        if(proxy.fixed_servers_username){
+            detail += ' (authenticated)';
+        }
     }
     checked = proxy.enable?'checked':'';
 
@@ -19,7 +22,7 @@ function add_proxy_row(index,proxy){
         var html = "<tr>"+
         "<td><input name='enable' type='checkbox'></td>"+
         "<td class='hidden'><input name='is_default' type='radio'></td>"+
-        "<td><span id='color'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td>"+
+        "<td><span class='color-cell'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td>"+
         "<td id='mode'></td>"+
         "<td id='detail'></td>"+
         "<td><input title='edit' name='edit' type='image' src='../image/edit-icon.png' width='24'>&nbsp;<input title='delete' name='delete' type='image' src='../image/delete-icon.png' width='24'></td>"+
@@ -30,10 +33,9 @@ function add_proxy_row(index,proxy){
             var table = $(this).closest('table');
             var row = $(this).closest('tr');
             var i= table.find('tr').index(row) -1;
-            TS.config.proxy_list.remove(i);
+            TS.config.proxy_list.splice(i, 1);
             TS.save_config();
             row.remove();
-            // todo 如果删掉的是一个正在使用的proxy，那么要做相应的调整?
         });
         $(row).find("input[name='edit']").click(function(e){
             var table = $(this).closest('table');
@@ -54,14 +56,14 @@ function add_proxy_row(index,proxy){
     }
 
     if(proxy.enable){
-        $(row).find('input[name=enable]').attr('checked',true);
+        $(row).find('input[name=enable]').prop('checked',true);
     }else{
-        $(row).find('input[name=enable]').attr('checked',false);
+        $(row).find('input[name=enable]').prop('checked',false);
     }
     if(proxy.color){
-        $(row).find('#color').css("background-color","#"+proxy.color);
+        $(row).find('.color-cell').css("background-color","#"+proxy.color);
     }else{
-        $(row).find('#color').css("background-color","#FFFFFF");
+        $(row).find('.color-cell').css("background-color","#FFFFFF");
     }
     $(row).find("#mode").html(mode);
     $(row).find("#detail").html(detail);
@@ -69,18 +71,27 @@ function add_proxy_row(index,proxy){
 }
 function open_proxy_setting(proxy,index){
 
-    $("#proxy_setting input:radio[name=proxy_mode][value={mode}]".format({mode:proxy.mode})).click();
-    $("#proxy_setting input:radio[name=proxy_mode]").change();
+    var modeSelector = '#proxy_setting input[name="proxy_mode"][value="' + proxy.mode + '"]';
+    $(modeSelector).prop('checked', true);
+    $("#proxy_setting input:radio[name=proxy_mode]").trigger('change');
 
     $("#proxy_setting #pac_script_url").val("");
     $("#proxy_setting #fixed_servers_name").val("");
     $("#proxy_setting #fixed_servers_port").val("");
+    $("#proxy_setting #fixed_servers_username").val("");
+    $("#proxy_setting #fixed_servers_password").val("");
     $("#proxy_setting input:radio[name=fixed_servers_schema][value=socks5]").attr('selected',true);
 
     var color = $("#proxy_setting #color").get(0);
     color.color.fromString("FFFFFF");
 
     if(proxy.mode=='direct'){
+        var color = $("#proxy_setting #color_direct").get(0);
+        if(color && proxy.color){
+            color.color.fromString(proxy.color);
+        }else if(color){
+            color.color.fromString("FFFFFF");
+        }
     }else if(proxy.mode=='pac_script'){
         color.color.fromString(proxy.color);
         $("#proxy_setting #pac_script_url").val(proxy.pac_script_url);
@@ -88,7 +99,10 @@ function open_proxy_setting(proxy,index){
         color.color.fromString(proxy.color);
         $("#proxy_setting #fixed_servers_name").val(proxy.fixed_servers_name);
         $("#proxy_setting #fixed_servers_port").val(proxy.fixed_servers_port);
-        $("#proxy_setting input:radio[name=fixed_servers_schema][value={schema}]".format({schem:proxy.fixed_servers_schema})).attr('selected',true);
+        $("#proxy_setting #fixed_servers_username").val(proxy.fixed_servers_username || "");
+        $("#proxy_setting #fixed_servers_password").val(proxy.fixed_servers_password || "");
+        var schemaSelector = '#proxy_setting input[name="fixed_servers_schema"][value="' + proxy.fixed_servers_schema + '"]';
+        $(schemaSelector).prop('checked', true);
     }
 
     ok_btn_text = (index==-1)?'Add':'Update';
@@ -99,34 +113,57 @@ function open_proxy_setting(proxy,index){
             var newproxy = {enable:proxy.enable}
         }
         newproxy['mode'] = $("#proxy_setting input:radio[name=proxy_mode]:checked").val();
+        
+        // 获取颜色值
+        var colorValue = null;
+        if(newproxy['mode'] == 'direct'){
+            colorValue = $("#proxy_setting #color_direct").val();
+        } else {
+            colorValue = $("#proxy_setting #color").val();
+        }
+        
         if(newproxy['mode']=='direct'){
+            if(colorValue){
+                newproxy['color'] = colorValue;
+            }
         }else if(newproxy['mode']=='pac_script'){
             newproxy['pac_script_url'] = $("#proxy_setting #pac_script_url").val();
             if(newproxy['pac_script_url'].length==0 || newproxy['pac_script_url'].search(/[<>]/)!=-1){
                 alert('invalid PAC SCRIPT url');
                 return;
             }
-            newproxy['color'] = $("#proxy_setting #color").val();
+            newproxy['color'] = colorValue || "009933";
         }else if(newproxy['mode']=='fixed_servers'){
             newproxy['fixed_servers_schema'] = $("#proxy_setting input[name=fixed_servers_schema]:checked ").val();
             newproxy['fixed_servers_name'] = $("#proxy_setting #fixed_servers_name").val();
             newproxy['fixed_servers_port'] = $("#proxy_setting #fixed_servers_port").val();
+            
+            var username = $("#proxy_setting #fixed_servers_username").val();
+            var password = $("#proxy_setting #fixed_servers_password").val();
+            if(username){
+                newproxy['fixed_servers_username'] = username;
+            }
+            if(password){
+                newproxy['fixed_servers_password'] = password;
+            }
 
             if(newproxy['fixed_servers_name'].length==0 || newproxy['fixed_servers_name'].search(/[<>]/)!=-1){
                 alert('invalid proxy server');
                 return;
             }
             if(newproxy['fixed_servers_port'].search(/^\d+$/) == -1){
-                alert("port number[{port}] should be an integer".format({port:newproxy['fixed_servers_port']}));
+                alert("port number[" + newproxy['fixed_servers_port'] + "] should be an integer");
                 return;
             }
-            newproxy['color'] = $("#proxy_setting #color").val();
+            newproxy['color'] = colorValue || "CC0000";
         }
 
+        console.log("Saving new proxy:", JSON.stringify(newproxy));
+        
         if(index==-1){
             TS.config.proxy_list.push(newproxy);
             TS.save_config();
-            add_proxy_row(TS.config.proxy_list.length,newproxy);
+            add_proxy_row(TS.config.proxy_list.length-1,newproxy);
         }else{
             TS.config.proxy_list[index] = newproxy;
             TS.save_config();
@@ -171,13 +208,14 @@ function getParameter(paramName) {
   return null;
 }
 $(document).ready(function(){
-    var config = TS.load_config();
-    $.each(config.proxy_list,add_proxy_row);
+    TS.load_config(function(config) {
+        TS.config = config;
+        $.each(TS.config.proxy_list,add_proxy_row);
+    });
 
-    var details = chrome.app.getDetails();
+    var details = chrome.runtime.getManifest();
     $('#version').html('Version: '+ details.version);
 
-    //console.log($(location).attr('search'));
     if(getParameter('first')){
         $('#warning_msg').addClass('red');
     }else{
@@ -189,11 +227,18 @@ $(document).ready(function(){
     });
 
     $("#btn_clear").click(function(e){
-        TS.config = TS.default_config;
-        TS.save_config();
-        var config = TS.load_config();
-        $("#table_proxy_list").find('tr:gt(0)').remove();
-        $.each(config.proxy_list,add_proxy_row);
+        // 先完全清除存储
+        chrome.storage.local.clear(function() {
+            console.log("Storage cleared");
+            // 然后重置为默认配置
+            TS.config = JSON.parse(JSON.stringify(TS.default_config));
+            TS.save_config();
+            $("#table_proxy_list").find('tr:gt(0)').remove();
+            $.each(TS.config.proxy_list, function(i, p) {
+                add_proxy_row(i, p);
+            });
+            alert("Settings reset to default. Please reload the extension.");
+        });
     });
 
     $("#btn_add_proxy").click(function(e){
@@ -205,16 +250,22 @@ $(document).ready(function(){
         $("#proxy_setting #pac_script_url").attr('disabled',true);
         $("#proxy_setting #fixed_servers_name").attr('disabled',true);
         $("#proxy_setting #fixed_servers_port").attr('disabled',true);
+        $("#proxy_setting #fixed_servers_username").attr('disabled',true);
+        $("#proxy_setting #fixed_servers_password").attr('disabled',true);
         $("#proxy_setting input:radio[name=fixed_servers_schema]").attr('disabled',true);
         $("#proxy_setting #color").attr('disabled',true);
+        $("#proxy_setting #color_direct").attr('disabled',true);
 
         if(mode=='direct'){
+            $("#proxy_setting #color_direct").attr('disabled',false);
         }else if(mode=='pac_script'){
             $("#proxy_setting #pac_script_url").attr('disabled',false);
             $("#proxy_setting #color").attr('disabled',false);
         }else if(mode=='fixed_servers'){
             $("#proxy_setting #fixed_servers_name").attr('disabled',false);
             $("#proxy_setting #fixed_servers_port").attr('disabled',false);
+            $("#proxy_setting #fixed_servers_username").attr('disabled',false);
+            $("#proxy_setting #fixed_servers_password").attr('disabled',false);
             $("#proxy_setting input:radio[name=fixed_servers_schema]").attr('disabled',false);
             $("#proxy_setting #color").attr('disabled',false);
         }

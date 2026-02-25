@@ -17,7 +17,22 @@ Though I mainly use this extension with socks5 proxy, Other proxy schemas http/h
 
 1. 下载 TunnelSwitch.crx，链接: http://pan.baidu.com/s/1kT5Yozt 密码: ymt2
 2. 下载 proxy.pac ，链接: http://pan.baidu.com/s/1dD0KNol 密码: d8u5
-3. 打开 Chrome，进入“设置”界面中的“扩展程序”界面
+3. 打开 Chrome，进入"设置"界面中的"扩展程序"界面
 4. 将下载完的crx拖放到Chrome窗口里
-5. Chrome浏览器会提示你是否新增扩展程序，点击“是”
-6. 在Tunnel proxy设置界面，修改“PAC FILE”模式下的配置文件路径，比如 file:///Users/oylbin/proxy.pac
+5. Chrome浏览器会提示你是否新增扩展程序，点击"是"
+6. 在Tunnel proxy设置界面，修改"PAC FILE"模式下的配置文件路径，比如 file:///Users/oylbin/proxy.pac
+
+### 本地安装测试
+
+1. 打开 Chrome，进入"设置"界面中的"扩展程序"界面
+2. 开启"开发者模式"
+3. 点击"加载已解压的扩展程序"
+4. 选择本项目目录
+
+### 更新日志
+
+#### v1.0.5 (2026-02-25)
+- 升级至 Manifest V3 以兼容最新 Chrome 浏览器
+- 将 background page 改为 Service Worker
+- 更新 API 调用：browserAction → action, extension → runtime
+- 分离 host_permissions 到独立字段
