@@ -88,16 +88,17 @@ var changeProxy = function(index, config, callback) {
     
     console.log("Setting proxy config:", JSON.stringify(configProxy));
     
-    // 使用最简单的方式调用
-    var details = {value: configProxy, scope: 'regular'};
-    chrome.proxy.settings.set(details, function() {
-        var err = chrome.runtime.lastError;
-        if (err) {
-            console.log("Proxy set error:", err);
-        } else {
-            console.log("Proxy set success!");
-        }
-    });
+    // 使用try-catch
+    try {
+        var details = {value: configProxy, scope: 'regular'};
+        console.log("Calling chrome.proxy.settings.set...");
+        chrome.proxy.settings.set(details, function() {
+            console.log("Callback called, lastError:", chrome.runtime.lastError);
+        });
+        console.log("chrome.proxy.settings.set called");
+    } catch(e) {
+        console.log("Exception in proxy.settings.set:", e.message);
+    }
     
     chrome.action.setTitle({ title: title });
     

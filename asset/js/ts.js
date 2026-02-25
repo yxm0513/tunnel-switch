@@ -4,7 +4,7 @@ TS = {
         'use_default_proxy': 0,
         'current_proxy_index': 0,
         'proxy_list': [
-            { mode: 'direct', enable: 1, color: "00FF00" },
+            { mode: 'direct', enable: 1, color: "FFFFF" },
             { mode: 'pac_script', enable: 1, color: "009933", pac_script_url: 'https://raw.githubusercontent.com/oylbin/tunnel-switch/master/asset/example.pac' },
             { mode: 'fixed_servers', enable: 1, color: "CC0000", fixed_servers_schema: 'socks5', fixed_servers_name: '127.0.0.1', fixed_servers_port: '8527' }
         ]
@@ -59,13 +59,6 @@ TS = {
             var title = "direct, no proxy";
             chrome.action.setIcon({path:"../image/direct.png"});
             chrome.action.setBadgeText({text:""});
-            if(proxy.color){
-                var r = parseInt(proxy.color.substr(0,2),16);
-                var g = parseInt(proxy.color.substr(2,2),16);
-                var b = parseInt(proxy.color.substr(4,2),16);
-                chrome.action.setBadgeBackgroundColor({color:[r,g,b,255]});
-                chrome.action.setBadgeText({text: " "});
-            }
         }
         chrome.proxy.settings.set({value: config, scope: 'regular'},function() {});
         if(proxy.color){
