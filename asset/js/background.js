@@ -24,15 +24,36 @@ function setBadgeColor(color) {
     }
 }
 
-var changeProxy = function(index, config, callback) {
+function doSetProxy(configProxy, title, callback) {
+    console.log("Setting proxy:", JSON.stringify(configProxy));
+    
+    // 使用 setTimeout 延迟调用
+    setTimeout(function() {
+        try {
+            chrome.proxy.settings.set({
+                value: configProxy,
+                scope: 'regular'
+            }, function() {
+                console.log("Proxy set callback, lastError:", chrome.runtime.lastError);
+            });
+            console.log("chrome.proxy.settings.set called OK");
+        } catch(e) {
+            console.log("Exception:", e);
+        }
+        
+        chrome.action.setTitle({ title: title });
+        
+        if (callback) callback();
+    }, 100);
+}
+
+function changeProxy(index, config, callback) {
     if (!config || index < 0 || index >= config.proxy_list.length) {
         index = 0;
     }
     
     var proxy = config.proxy_list[index];
-    console.log("=== changeProxy ===");
-    console.log("index:", index);
-    console.log("proxy:", JSON.stringify(proxy));
+    console.log("=== changeProxy === index:", index, "proxy:", JSON.stringify(proxy));
     
     var configProxy, title;
     
@@ -72,7 +93,6 @@ var changeProxy = function(index, config, callback) {
         chrome.action.setBadgeText({ text: " " });
         setBadgeColor(proxy.color);
     } else {
-        // direct
         configProxy = { mode: "direct" };
         title = "direct, no proxy";
         chrome.action.setIcon({ path: "../image/direct.png" });
@@ -86,32 +106,15 @@ var changeProxy = function(index, config, callback) {
         }
     }
     
-    console.log("Setting proxy config:", JSON.stringify(configProxy));
-    
-    // 使用try-catch
-    try {
-        var details = {value: configProxy, scope: 'regular'};
-        console.log("Calling chrome.proxy.settings.set...");
-        chrome.proxy.settings.set(details, function() {
-            console.log("Callback called, lastError:", chrome.runtime.lastError);
-        });
-        console.log("chrome.proxy.settings.set called");
-    } catch(e) {
-        console.log("Exception in proxy.settings.set:", e.message);
-    }
-    
-    chrome.action.setTitle({ title: title });
-    
-    if (callback) callback();
-};
+    doSetProxy(configProxy, title, callback);
+}
 
 var cycleProxy = function(config) {
     var currentIdx = config.current_proxy_index;
     var list = config.proxy_list;
     var len = list.length;
     
-    console.log("=== cycleProxy ===");
-    console.log("currentIdx:", currentIdx);
+    console.log("=== cycleProxy === currentIdx:", currentIdx);
     
     var next_index = -1;
     
