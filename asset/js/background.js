@@ -24,165 +24,153 @@ function setBadgeColor(color) {
     }
 }
 
-function changeProxy(index, config, callback) {
-    try {
-        if (!config || index < 0 || index >= config.proxy_list.length) {
-            index = 0;
+async function changeProxy(index, config) {
+    if (!config || index < 0 || index >= config.proxy_list.length) {
+        index = 0;
+    }
+    
+    var proxy = config.proxy_list[index];
+    console.log("=== changeProxy === index:", index, "proxy:", JSON.stringify(proxy));
+    
+    var configProxy, title;
+    
+    if (proxy.mode === 'pac_script') {
+        configProxy = {
+            mode: "pac_script",
+            pacScript: {
+                url: proxy.pac_script_url + "?" + new Date().getTime(),
+                mandatory: true
+            }
+        };
+        chrome.action.setIcon({ path: "../image/pac.png" });
+        title = "PAC: " + proxy.pac_script_url;
+        chrome.action.setBadgeText({ text: " " });
+        setBadgeColor(proxy.color);
+    } else if (proxy.mode === 'fixed_servers') {
+        var singleProxy = {
+            scheme: proxy.fixed_servers_schema,
+            host: proxy.fixed_servers_name,
+            port: parseInt(proxy.fixed_servers_port)
+        };
+        
+        if (proxy.fixed_servers_username && proxy.fixed_servers_password) {
+            singleProxy.username = proxy.fixed_servers_username;
+            singleProxy.password = proxy.fixed_servers_password;
         }
         
-        var proxy = config.proxy_list[index];
-        console.log("=== changeProxy === index:", index, "proxy:", JSON.stringify(proxy));
-        
-        var configProxy, title;
-        
-        if (proxy.mode === 'pac_script') {
-            configProxy = {
-                mode: "pac_script",
-                pacScript: {
-                    url: proxy.pac_script_url + "?" + new Date().getTime(),
-                    mandatory: true
-                }
-            };
-            chrome.action.setIcon({ path: "../image/pac.png" });
-            title = "PAC: " + proxy.pac_script_url;
-            chrome.action.setBadgeText({ text: " " });
-            setBadgeColor(proxy.color);
-        } else if (proxy.mode === 'fixed_servers') {
-            var singleProxy = {
-                scheme: proxy.fixed_servers_schema,
-                host: proxy.fixed_servers_name,
-                port: parseInt(proxy.fixed_servers_port)
-            };
-            
-            if (proxy.fixed_servers_username && proxy.fixed_servers_password) {
-                singleProxy.username = proxy.fixed_servers_username;
-                singleProxy.password = proxy.fixed_servers_password;
+        configProxy = {
+            mode: "fixed_servers",
+            rules: {
+                singleProxy: singleProxy,
+                bypassList: ["127.0.0.1", "localhost"]
             }
-            
-            configProxy = {
-                mode: "fixed_servers",
-                rules: {
-                    singleProxy: singleProxy,
-                    bypassList: ["127.0.0.1", "localhost"]
-                }
-            };
-            chrome.action.setIcon({ path: "../image/pac.png" });
-            title = proxy.fixed_servers_schema + ", " + proxy.fixed_servers_name + ":" + proxy.fixed_servers_port;
+        };
+        chrome.action.setIcon({ path: "../image/pac.png" });
+        title = proxy.fixed_servers_schema + ", " + proxy.fixed_servers_name + ":" + proxy.fixed_servers_port;
+        chrome.action.setBadgeText({ text: " " });
+        setBadgeColor(proxy.color);
+    } else {
+        configProxy = { mode: "direct" };
+        title = "direct, no proxy";
+        chrome.action.setIcon({ path: "../image/direct.png" });
+        
+        if (proxy.color) {
             chrome.action.setBadgeText({ text: " " });
             setBadgeColor(proxy.color);
         } else {
-            configProxy = { mode: "direct" };
-            title = "direct, no proxy";
-            chrome.action.setIcon({ path: "../image/direct.png" });
-            
-            if (proxy.color) {
-                chrome.action.setBadgeText({ text: " " });
-                setBadgeColor(proxy.color);
-            } else {
-                chrome.action.setBadgeText({ text: "" });
-                setBadgeColor("808080");
-            }
+            chrome.action.setBadgeText({ text: "" });
+            setBadgeColor("808080");
         }
-        
-        console.log("Setting proxy config:", JSON.stringify(configProxy));
-        
-        // 直接同步调用
-        chrome.proxy.settings.set({value: configProxy, scope: 'regular'}, function() {
-            var err = chrome.runtime.lastError;
-            console.log("Proxy callback, lastError:", err);
-        });
-        
-        chrome.action.setTitle({ title: title });
-        
-        if (callback) callback();
-    } catch(e) {
-        console.log("Error in changeProxy:", e);
     }
+    
+    console.log("Setting proxy config:", JSON.stringify(configProxy));
+    
+    try {
+        // 使用 await 调用 Promise
+        await chrome.proxy.settings.set({value: configProxy, scope: 'regular'});
+        console.log("Proxy set successfully!");
+    } catch(e) {
+        console.log("Error setting proxy:", e);
+    }
+    
+    chrome.action.setTitle({ title: title });
 }
 
 function cycleProxy(config) {
-    try {
-        var currentIdx = config.current_proxy_index;
-        var list = config.proxy_list;
-        var len = list.length;
-        
-        console.log("=== cycleProxy === currentIdx:", currentIdx);
-        
-        var next_index = -1;
-        
-        for (var i = 1; i < len; i++) {
-            var j = (currentIdx + i) % len;
-            if (list[j].enable) {
-                next_index = j;
-                break;
-            }
+    var currentIdx = config.current_proxy_index;
+    var list = config.proxy_list;
+    var len = list.length;
+    
+    console.log("=== cycleProxy === currentIdx:", currentIdx);
+    
+    var next_index = -1;
+    
+    for (var i = 1; i < len; i++) {
+        var j = (currentIdx + i) % len;
+        if (list[j].enable) {
+            next_index = j;
+            break;
         }
-        
-        if (next_index === -1) {
-            if (list[currentIdx] && list[currentIdx].enable) {
-                next_index = currentIdx;
-            } else {
-                for (var i = 0; i < len; i++) {
-                    if (list[i].enable) {
-                        next_index = i;
-                        break;
-                    }
+    }
+    
+    if (next_index === -1) {
+        if (list[currentIdx] && list[currentIdx].enable) {
+            next_index = currentIdx;
+        } else {
+            for (var i = 0; i < len; i++) {
+                if (list[i].enable) {
+                    next_index = i;
+                    break;
                 }
             }
         }
-        
-        console.log("next_index:", next_index);
-        
-        if (next_index === -1) {
-            chrome.tabs.create({ url: chrome.runtime.getURL("asset/html/options.html?first=1") });
-            return;
-        }
-        
-        changeProxy(next_index, config, function() {
-            config.current_proxy_index = next_index;
-            console.log("Saving new index:", next_index);
-            chrome.storage.local.set({ 'switch_config': JSON.stringify(config) });
-        });
-    } catch(e) {
-        console.log("Error in cycleProxy:", e);
     }
+    
+    console.log("next_index:", next_index);
+    
+    if (next_index === -1) {
+        chrome.tabs.create({ url: chrome.runtime.getURL("asset/html/options.html?first=1") });
+        return;
+    }
+    
+    changeProxy(next_index, config).then(function() {
+        config.current_proxy_index = next_index;
+        console.log("Saving new index:", next_index);
+        chrome.storage.local.set({ 'switch_config': JSON.stringify(config) });
+    });
 }
 
 function loadConfig(callback) {
-    try {
-        chrome.storage.local.get('switch_config', function(items) {
-            console.log("Storage items:", items);
-            
-            var config;
-            if (items.switch_config) {
-                try {
-                    config = JSON.parse(items.switch_config);
-                } catch (e) {
-                    console.log("Parse error, using default");
-                    config = defaultConfig;
-                }
-            } else {
-                console.log("No stored config, using default");
+    chrome.storage.local.get('switch_config', function(items) {
+        console.log("Storage items:", items);
+        
+        var config;
+        if (items.switch_config) {
+            try {
+                config = JSON.parse(items.switch_config);
+            } catch (e) {
+                console.log("Parse error, using default");
                 config = defaultConfig;
             }
-            
-            var keys = ['click_action', 'use_default_proxy', 'current_proxy_index'];
-            for (var i = 0; i < keys.length; i++) {
-                if (config[keys[i]] === undefined) {
-                    config[keys[i]] = defaultConfig[keys[i]];
-                }
+        } else {
+            console.log("No stored config, using default");
+            config = defaultConfig;
+        }
+        
+        var keys = ['click_action', 'use_default_proxy', 'current_proxy_index'];
+        for (var i = 0; i < keys.length; i++) {
+            if (config[keys[i]] === undefined) {
+                config[keys[i]] = defaultConfig[keys[i]];
             }
-            
-            if (!config.proxy_list) {
-                config.proxy_list = defaultConfig.proxy_list;
-            }
-            
-            console.log("Final config:", JSON.stringify(config));
-            if (callback) callback(config);
-        });
-    } catch(e) {
-        console.log("Error in loadConfig:", e);
-    }
+        }
+        
+        if (!config.proxy_list) {
+            config.proxy_list = defaultConfig.proxy_list;
+        }
+        
+        console.log("Final config:", JSON.stringify(config));
+        if (callback) callback(config);
+    });
 }
 
 // 点击图标时切换代理
