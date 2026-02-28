@@ -24,7 +24,19 @@ function setBadgeColor(color) {
     }
 }
 
-async function changeProxy(index, config) {
+function doSetProxy(configProxy) {
+    console.log("doSetProxy called with:", JSON.stringify(configProxy));
+    
+    // 测试最简单的API调用
+    console.log("chrome.proxy:", chrome.proxy);
+    console.log("chrome.proxy.settings:", chrome.proxy.settings);
+    
+    // 直接调用
+    var result = chrome.proxy.settings.set({value: configProxy, scope: 'regular'});
+    console.log("set result:", result);
+}
+
+function changeProxy(index, config, callback) {
     if (!config || index < 0 || index >= config.proxy_list.length) {
         index = 0;
     }
@@ -85,15 +97,16 @@ async function changeProxy(index, config) {
     
     console.log("Setting proxy config:", JSON.stringify(configProxy));
     
+    // 测试调用
     try {
-        // 使用 await 调用 Promise
-        await chrome.proxy.settings.set({value: configProxy, scope: 'regular'});
-        console.log("Proxy set successfully!");
+        doSetProxy(configProxy);
     } catch(e) {
-        console.log("Error setting proxy:", e);
+        console.log("Exception in doSetProxy:", e);
     }
     
     chrome.action.setTitle({ title: title });
+    
+    if (callback) callback();
 }
 
 function cycleProxy(config) {
@@ -133,7 +146,7 @@ function cycleProxy(config) {
         return;
     }
     
-    changeProxy(next_index, config).then(function() {
+    changeProxy(next_index, config, function() {
         config.current_proxy_index = next_index;
         console.log("Saving new index:", next_index);
         chrome.storage.local.set({ 'switch_config': JSON.stringify(config) });
