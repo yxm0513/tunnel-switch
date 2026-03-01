@@ -17,23 +17,31 @@ function setBadgeColor(color) {
         var r = parseInt(color.substr(0, 2), 16);
         var g = parseInt(color.substr(2, 2), 16);
         var b = parseInt(color.substr(4, 2), 16);
-        console.log("Setting badge color:", color, "->", r, g, b);
         chrome.action.setBadgeBackgroundColor({ color: [r, g, b, 255] });
     } else {
         chrome.action.setBadgeBackgroundColor({ color: [128, 128, 128, 255] });
     }
 }
 
-function doSetProxy(configProxy) {
+function doSetProxy(configProxy, callback) {
     console.log("doSetProxy called with:", JSON.stringify(configProxy));
     
-    // 测试最简单的API调用
-    console.log("chrome.proxy:", chrome.proxy);
-    console.log("chrome.proxy.settings:", chrome.proxy.settings);
-    
-    // 直接调用
-    var result = chrome.proxy.settings.set({value: configProxy, scope: 'regular'});
-    console.log("set result:", result);
+    try {
+        chrome.proxy.settings.set(
+            { value: configProxy, scope: 'regular' },
+            function() {
+                if (chrome.runtime.lastError) {
+                    console.error("Proxy set error:", chrome.runtime.lastError);
+                } else {
+                    console.log("Proxy set successfully");
+                }
+                if (callback) callback();
+            }
+        );
+    } catch(e) {
+        console.error("Exception setting proxy:", e);
+        if (callback) callback();
+    }
 }
 
 function changeProxy(index, config, callback) {
@@ -42,7 +50,7 @@ function changeProxy(index, config, callback) {
     }
     
     var proxy = config.proxy_list[index];
-    console.log("=== changeProxy === index:", index, "proxy:", JSON.stringify(proxy));
+    console.log("=== changeProxy === index:", index, "proxy mode:", proxy.mode);
     
     var configProxy, title;
     
@@ -60,21 +68,16 @@ function changeProxy(index, config, callback) {
         setBadgeColor(proxy.color);
     } else if (proxy.mode === 'fixed_servers') {
         var singleProxy = {
-            scheme: proxy.fixed_servers_schema,
+            scheme: proxy.fixed_servers_schema || 'http',
             host: proxy.fixed_servers_name,
             port: parseInt(proxy.fixed_servers_port)
         };
-        
-        if (proxy.fixed_servers_username && proxy.fixed_servers_password) {
-            singleProxy.username = proxy.fixed_servers_username;
-            singleProxy.password = proxy.fixed_servers_password;
-        }
         
         configProxy = {
             mode: "fixed_servers",
             rules: {
                 singleProxy: singleProxy,
-                bypassList: ["127.0.0.1", "localhost"]
+                bypassList: ["127.0.0.1", "localhost", "::1"]
             }
         };
         chrome.action.setIcon({ path: "../image/pac.png" });
@@ -95,18 +98,14 @@ function changeProxy(index, config, callback) {
         }
     }
     
-    console.log("Setting proxy config:", JSON.stringify(configProxy));
+    console.log("Setting proxy config");
     
-    // 测试调用
-    try {
-        doSetProxy(configProxy);
-    } catch(e) {
-        console.log("Exception in doSetProxy:", e);
-    }
+    doSetProxy(configProxy, function() {
+        console.log("Proxy configuration applied");
+        if (callback) callback();
+    });
     
     chrome.action.setTitle({ title: title });
-    
-    if (callback) callback();
 }
 
 function cycleProxy(config) {
@@ -139,8 +138,6 @@ function cycleProxy(config) {
         }
     }
     
-    console.log("next_index:", next_index);
-    
     if (next_index === -1) {
         chrome.tabs.create({ url: chrome.runtime.getURL("asset/html/options.html?first=1") });
         return;
@@ -148,25 +145,20 @@ function cycleProxy(config) {
     
     changeProxy(next_index, config, function() {
         config.current_proxy_index = next_index;
-        console.log("Saving new index:", next_index);
         chrome.storage.local.set({ 'switch_config': JSON.stringify(config) });
     });
 }
 
 function loadConfig(callback) {
     chrome.storage.local.get('switch_config', function(items) {
-        console.log("Storage items:", items);
-        
         var config;
         if (items.switch_config) {
             try {
                 config = JSON.parse(items.switch_config);
             } catch (e) {
-                console.log("Parse error, using default");
                 config = defaultConfig;
             }
         } else {
-            console.log("No stored config, using default");
             config = defaultConfig;
         }
         
@@ -181,14 +173,12 @@ function loadConfig(callback) {
             config.proxy_list = defaultConfig.proxy_list;
         }
         
-        console.log("Final config:", JSON.stringify(config));
         if (callback) callback(config);
     });
 }
 
 // 点击图标时切换代理
 chrome.action.onClicked.addListener(function(tab) {
-    console.log("=== ICON CLICKED ===");
     loadConfig(function(config) {
         cycleProxy(config);
     });
@@ -196,6 +186,58 @@ chrome.action.onClicked.addListener(function(tab) {
 
 // 启动时加载配置
 loadConfig(function(config) {
-    console.log("=== STARTUP ===");
     changeProxy(config.current_proxy_index, config);
 });
+
+// 代理认证监听器 (需要企业安装才能生效)
+function setupAuthListener() {
+    try {
+        if (typeof chrome !== 'undefined' && chrome.webRequest && chrome.webRequest.onAuthRequired) {
+            chrome.webRequest.onAuthRequired.addListener(
+                function(details) {
+                    console.log("Auth required:", details.url, "isProxy:", details.isProxy);
+                    
+                    if (!details.isProxy) {
+                        return {};
+                    }
+                    
+                    return new Promise(function(resolve) {
+                        chrome.storage.local.get('switch_config', function(items) {
+                            var config = defaultConfig;
+                            try {
+                                if (items.switch_config) {
+                                    config = JSON.parse(items.switch_config);
+                                }
+                            } catch(e) {}
+                            
+                            var currentProxy = config.proxy_list[config.current_proxy_index];
+                            
+                            if (currentProxy && 
+                                currentProxy.mode === 'fixed_servers' && 
+                                currentProxy.fixed_servers_username && 
+                                currentProxy.fixed_servers_password) {
+                                
+                                console.log("Providing proxy auth credentials");
+                                resolve({
+                                    authCredentials: {
+                                        username: currentProxy.fixed_servers_username,
+                                        password: currentProxy.fixed_servers_password
+                                    }
+                                });
+                            } else {
+                                resolve({});
+                            }
+                        });
+                    });
+                },
+                {urls: ["<all_urls>"]},
+                ['asyncBlocking']
+            );
+            console.log("Auth listener registered");
+        }
+    } catch(e) {
+        console.log("Auth listener note:", e.message);
+    }
+}
+
+setupAuthListener();
